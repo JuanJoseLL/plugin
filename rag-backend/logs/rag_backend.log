@@ -1,0 +1,111 @@
+2025-03-28 11:14:50,714 - config - INFO - Ensured Neo4j constraints exist.
+2025-03-28 11:14:51,449 - config - INFO - Initialized LangChain components (Embeddings, ChatModel, Neo4jGraph, Neo4jVector)
+2025-03-28 11:14:52,114 - config - INFO - Ensured Neo4j constraints exist.
+2025-03-28 11:14:52,755 - config - INFO - Initialized LangChain components (Embeddings, ChatModel, Neo4jGraph, Neo4jVector)
+2025-03-28 11:14:52,812 - config - INFO - Ensured Neo4j constraints exist.
+2025-03-28 11:14:53,414 - config - INFO - Initialized LangChain components (Embeddings, ChatModel, Neo4jGraph, Neo4jVector)
+2025-03-28 11:15:22,157 - config - INFO - Received chat message (truncated): What are the main topics discussed in the document?...
+2025-03-28 11:15:22,158 - config - INFO - Invoking RAG chain...
+2025-03-28 11:15:22,431 - config - INFO - Fetched 4 unique neighbor chunks from graph.
+2025-03-28 11:15:22,433 - config - ERROR - Unexpected error during LLM call (attempt 1/3): Object of type CallbackManagerForLLMRun is not JSON serializable
+2025-03-28 11:15:24,439 - config - ERROR - Unexpected error during LLM call (attempt 2/3): Object of type CallbackManagerForLLMRun is not JSON serializable
+2025-03-28 11:15:28,446 - config - ERROR - Unexpected error during LLM call (attempt 3/3): Object of type CallbackManagerForLLMRun is not JSON serializable
+2025-03-28 11:15:28,447 - config - ERROR - An unexpected error occurred in /chat endpoint: Unexpected LLM error: Object of type CallbackManagerForLLMRun is not JSON serializable
+Traceback (most recent call last):
+  File "/Users/juanjose/juan/uni/semestre8/ia/plugin/rag-backend/model_client.py", line 63, in _call
+    response = requests.post(self.api_url, headers=headers, json=payload, timeout=LLM_TIMEOUT)
+  File "/Users/juanjose/juan/uni/semestre8/ia/plugin/venv/lib/python3.13/site-packages/requests/api.py", line 115, in post
+    return request("post", url, data=data, json=json, **kwargs)
+  File "/Users/juanjose/juan/uni/semestre8/ia/plugin/venv/lib/python3.13/site-packages/requests/api.py", line 59, in request
+    return session.request(method=method, url=url, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/juanjose/juan/uni/semestre8/ia/plugin/venv/lib/python3.13/site-packages/requests/sessions.py", line 575, in request
+    prep = self.prepare_request(req)
+  File "/Users/juanjose/juan/uni/semestre8/ia/plugin/venv/lib/python3.13/site-packages/requests/sessions.py", line 484, in prepare_request
+    p.prepare(
+    ~~~~~~~~~^
+        method=request.method.upper(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<10 lines>...
+        hooks=merge_hooks(request.hooks, self.hooks),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/juanjose/juan/uni/semestre8/ia/plugin/venv/lib/python3.13/site-packages/requests/models.py", line 370, in prepare
+    self.prepare_body(data, files, json)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Users/juanjose/juan/uni/semestre8/ia/plugin/venv/lib/python3.13/site-packages/requests/models.py", line 510, in prepare_body
+    body = complexjson.dumps(json, allow_nan=False)
+  File "/opt/homebrew/Cellar/python@3.13/3.13.2/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/__init__.py", line 238, in dumps
+    **kw).encode(obj)
+          ~~~~~~^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.2/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/encoder.py", line 200, in encode
+    chunks = self.iterencode(o, _one_shot=True)
+  File "/opt/homebrew/Cellar/python@3.13/3.13.2/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/encoder.py", line 261, in iterencode
+    return _iterencode(o, 0)
+  File "/opt/homebrew/Cellar/python@3.13/3.13.2/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/encoder.py", line 180, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+                    f'is not JSON serializable')
+TypeError: Object of type CallbackManagerForLLMRun is not JSON serializable
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/juanjose/juan/uni/semestre8/ia/plugin/rag-backend/main.py", line 162, in chat
+    reply = await rag_chain.ainvoke(message) # Use async invoke for FastAPI
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/juanjose/juan/uni/semestre8/ia/plugin/venv/lib/python3.13/site-packages/langchain_core/runnables/base.py", line 3066, in ainvoke
+    input = await asyncio.create_task(part(), context=context)  # type: ignore
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/juanjose/juan/uni/semestre8/ia/plugin/venv/lib/python3.13/site-packages/langchain_core/language_models/chat_models.py", line 328, in ainvoke
+    llm_result = await self.agenerate_prompt(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<8 lines>...
+    )
+    ^
+  File "/Users/juanjose/juan/uni/semestre8/ia/plugin/venv/lib/python3.13/site-packages/langchain_core/language_models/chat_models.py", line 853, in agenerate_prompt
+    return await self.agenerate(
+           ^^^^^^^^^^^^^^^^^^^^^
+        prompt_messages, stop=stop, callbacks=callbacks, **kwargs
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/juanjose/juan/uni/semestre8/ia/plugin/venv/lib/python3.13/site-packages/langchain_core/language_models/chat_models.py", line 813, in agenerate
+    raise exceptions[0]
+  File "/Users/juanjose/juan/uni/semestre8/ia/plugin/venv/lib/python3.13/site-packages/langchain_core/language_models/chat_models.py", line 981, in _agenerate_with_cache
+    result = await self._agenerate(
+             ^^^^^^^^^^^^^^^^^^^^^^
+        messages, stop=stop, run_manager=run_manager, **kwargs
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/juanjose/juan/uni/semestre8/ia/plugin/venv/lib/python3.13/site-packages/langchain_core/language_models/chat_models.py", line 1366, in _agenerate
+    return await run_in_executor(
+           ^^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "/Users/juanjose/juan/uni/semestre8/ia/plugin/venv/lib/python3.13/site-packages/langchain_core/runnables/config.py", line 622, in run_in_executor
+    return await asyncio.get_running_loop().run_in_executor(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+    )
+    ^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.2/Frameworks/Python.framework/Versions/3.13/lib/python3.13/concurrent/futures/thread.py", line 59, in run
+    result = self.fn(*self.args, **self.kwargs)
+  File "/Users/juanjose/juan/uni/semestre8/ia/plugin/venv/lib/python3.13/site-packages/langchain_core/runnables/config.py", line 613, in wrapper
+    return func(*args, **kwargs)
+  File "/Users/juanjose/juan/uni/semestre8/ia/plugin/venv/lib/python3.13/site-packages/langchain_core/language_models/chat_models.py", line 1344, in _generate
+    output_str = self._call(messages, stop=stop, run_manager=run_manager, **kwargs)
+  File "/Users/juanjose/juan/uni/semestre8/ia/plugin/rag-backend/model_client.py", line 81, in _call
+    if attempt + 1 == LLM_RETRIES: raise RuntimeError(f"Unexpected LLM error: {e}")
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: Unexpected LLM error: Object of type CallbackManagerForLLMRun is not JSON serializable
+2025-03-28 13:47:49,459 - config - INFO - Ensured Neo4j constraints exist.
+2025-03-28 13:47:50,895 - config - INFO - Initialized LangChain components (Embeddings, ChatModel, Neo4jGraph, Neo4jVector)
+2025-03-28 13:47:50,981 - config - INFO - Ensured Neo4j constraints exist.
+2025-03-28 13:47:51,606 - config - INFO - Initialized LangChain components (Embeddings, ChatModel, Neo4jGraph, Neo4jVector)
+2025-03-28 13:47:56,446 - config - INFO - Received chat message (truncated): What are the main topics discussed in the document?...
+2025-03-28 13:47:56,447 - config - INFO - Invoking RAG chain...
+2025-03-28 13:47:56,677 - config - INFO - Fetched 4 unique neighbor chunks from graph.
+2025-03-28 13:48:05,546 - config - INFO - RAG chain finished, returning reply.
