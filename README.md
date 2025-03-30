@@ -257,17 +257,17 @@ This pipeline defines *how* knowledge is extracted from documents and structured
 
 ```mermaid
 graph TD
-    A[Start Ingestion Task <br> (file_path, document_id)] --> B{Load & Split Document};
-    B --> C{Add Chunks to Vector Store <br> (Neo4jVector)};
+    A["Start Ingestion Task <br> (file_path, document_id)"] --> B{Load & Split Document};
+    B --> C["Add Chunks to Vector Store <br> (Neo4jVector)"];
     C --> D{Create/Merge Document Node};
-    D --> E{Link Document to Chunks <br> ([:CONTAINS])};
-    E --> F{Link Sequential Chunks <br> ([:NEXT_CHUNK])};
+    D --> E["Link Document to Chunks <br> ([:CONTAINS])"];
+    E --> F["Link Sequential Chunks <br> ([:NEXT_CHUNK])"];
     F --> G{For Each Chunk...};
-    G --> H(Extract Entities <br> (Hugging Face NER));
+    G --> H["Extract Entities <br> (Hugging Face NER)"];
     H --> I{Create/Merge Entity Nodes};
-    I --> J{Link Chunk to Entities <br> ([:MENTIONS])};
-    J --> K{Find Similar Chunks <br> (Vector Index Query)};
-    K --> L{Create Similarity Links <br> ([:SIMILAR_TO])};
+    I --> J["Link Chunk to Entities <br> ([:MENTIONS])"];
+    J --> K["Find Similar Chunks <br> (Vector Index Query)"];
+    K --> L["Create Similarity Links <br> ([:SIMILAR_TO])"];
     L --> M[End Ingestion Task];
 
     style G fill:#eee,stroke:#333,stroke-dasharray: 5 5
@@ -292,22 +292,24 @@ This defines *how* relevant context is gathered from the graph to answer a user'
 
 ```mermaid
 graph TD
-    A[User Query] --> B(Embed Query);
-    B --> C{Initial Vector Search <br> (Neo4jVector, top_k=TOP_K_INITIAL_SEARCH)};
-    C -- Initial Chunk IDs --> D{Graph Traversal Query (`fetch_neighbors`)};
+    A[User Query] --> B(Embed Query)
+    B --> C{"Initial Vector Search <br> (Neo4jVector, top_k=TOP_K_INITIAL_SEARCH)"}
+    C -- Initial Chunk IDs --> D{Graph Traversal Query}
+    
     subgraph Graph Query Logic
-        D --> D1{Find Sequential Neighbors <br> ([:NEXT_CHUNK])};
-        D --> D2{Find Semantic Neighbors <br> ([:SIMILAR_TO], score > threshold)};
+        D --> D1{"Find Sequential Neighbors <br> ([:NEXT_CHUNK])"}
+        D --> D2{"Find Semantic Neighbors <br> ([:SIMILAR_TO], score > threshold)"}
         %% Add more traversal steps here if needed %%
-        %% D --> D3{Find Chunks via Shared Entities <br> (<-[:MENTIONS]-(:Entity)-[:MENTIONS]->)}; %%
-        D1 & D2 --> D4{Combine & Deduplicate Neighbors};
+        D1 & D2 --> D4{Combine & Deduplicate Neighbors}
     end
-    D4 -- Neighbor Chunks --> E{Combine Initial + Neighbor Chunks};
-    E --> F(Format Docs into String);
-    F --> G[Context for LLM];
+    
+    D4 -- Neighbor Chunks --> E{Combine Initial + Neighbor Chunks}
+    E --> F(Format Docs into String)
+    F --> G[Context for LLM]
 
     style C fill:#lightyellow,stroke:#333
     style D fill:#lightblue,stroke:#333
+
 ```
 
 ---
