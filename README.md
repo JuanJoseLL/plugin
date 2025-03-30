@@ -1,8 +1,8 @@
-# Graph RAG Project: [Your Project Name Here]
+# Graph RAG Project: Graph Rag template start up
 
 ## Table of Contents
 
-- [Graph RAG Project: \[Your Project Name Here\]](#graph-rag-project-your-project-name-here)
+- [Graph RAG Project: \[Graph Rag template start up\]]
   - [Table of Contents](#table-of-contents)
   - [Overview](#overview)
   - [Core Concepts: What is Graph RAG?](#core-concepts-what-is-graph-rag)
