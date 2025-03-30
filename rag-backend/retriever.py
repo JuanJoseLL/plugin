@@ -25,25 +25,56 @@ def get_graph_enhanced_retriever(vector_retriever: BaseRetriever, graph: Neo4jGr
         all_docs_map = {doc.metadata["id"]: doc for doc in docs}
         neighbor_query = """
         MATCH (c:Chunk) WHERE c.id IN $chunk_ids
-        // Fetch previous and next neighbors up to k_neighbors distance
+        
         CALL {
-            WITH c
+            // Get Top K Sequential Previous
+            MATCH (c:Chunk) WHERE c.id IN $chunk_ids
             MATCH path = (prev:Chunk)-[:NEXT_CHUNK*1..2]->(c)
-            RETURN prev as neighbor, length(path) as dist
-            ORDER BY dist DESC // Closest previous neighbor first
+            RETURN prev as neighbor, length(path) as dist, 'sequential_prev' as rel_type
+            ORDER BY dist DESC
+            LIMIT $k_neighbors
         UNION
-            WITH c
+            // Get Top K Sequential Next
+            MATCH (c:Chunk) WHERE c.id IN $chunk_ids
             MATCH path = (c)-[:NEXT_CHUNK*1..2]->(next:Chunk)
-            RETURN next as neighbor, length(path) as dist
-            ORDER BY dist ASC // Closest next neighbor first
+            RETURN next as neighbor, length(path) as dist, 'sequential_next' as rel_type
+            ORDER BY dist ASC
+            LIMIT $k_neighbors
+        UNION
+            // Get Top K Semantic Neighbors
+            MATCH (c:Chunk) WHERE c.id IN $chunk_ids
+            MATCH (c)-[sim:SIMILAR_TO]-(similar:Chunk) // Undirected
+            WHERE sim.score > 0.75 AND similar <> c   // Use your desired threshold
+            RETURN similar as neighbor, sim.score as dist, 'semantic' as rel_type
+            ORDER BY dist DESC
+            LIMIT $k_neighbors
         }
-        WITH neighbor WHERE NOT neighbor.id IN $chunk_ids // Only add neighbors not already retrieved
-        RETURN DISTINCT neighbor.id AS id, neighbor.text AS text, neighbor.source_document AS source_document, neighbor.chunk_index AS chunk_index
+        
+        // Filter out chunks we already have
+        WITH neighbor, dist, rel_type
+        WHERE NOT neighbor.id IN $chunk_ids
+
+        // Return the distinct neighbors that passed the filter
+        RETURN DISTINCT
+            neighbor.id AS id,
+            neighbor.text AS text,
+            neighbor.source_document AS source_document,
+            neighbor.chunk_index AS chunk_index,
+            rel_type AS relationship_type,
+            dist AS relationship_weight
         """
+        
         chunk_ids = list(all_docs_map.keys())
         try:
-            results = graph.query(neighbor_query, params={"chunk_ids": chunk_ids, "k_neighbors": k_neighbors})
-            added_neighbors = 0
+            results = graph.query(neighbor_query, params={
+                "chunk_ids": chunk_ids, 
+                "k_neighbors": k_neighbors
+            })
+            
+            # Track different neighbor types for logging
+            sequential_neighbors = 0
+            semantic_neighbors = 0
+            
             for record in results:
                 neighbor_id = record["id"]
                 if neighbor_id not in all_docs_map:
@@ -53,12 +84,21 @@ def get_graph_enhanced_retriever(vector_retriever: BaseRetriever, graph: Neo4jGr
                             "id": neighbor_id,
                             "source_document": record["source_document"],
                             "chunk_index": record["chunk_index"],
-                            "retrieval_source": "graph_neighbor" # Mark how it was retrieved
+                            "retrieval_source": record["relationship_type"],
+                            "relationship_weight": record["relationship_weight"]
                         }
                     )
                     all_docs_map[neighbor_id] = neighbor_doc
-                    added_neighbors += 1
-            logger.info(f"Fetched {added_neighbors} unique neighbor chunks from graph.")
+                    
+                    # Count by relationship type
+                    if record["relationship_type"].startswith("sequential"):
+                        sequential_neighbors += 1
+                    elif record["relationship_type"] == "semantic":
+                        semantic_neighbors += 1
+            
+            total_neighbors = sequential_neighbors + semantic_neighbors
+            logger.info(f"Fetched {total_neighbors} unique neighbor chunks: "
+                    f"{sequential_neighbors} sequential and {semantic_neighbors} semantic")
         except Exception as e:
             logger.error(f"Failed to fetch graph neighbors: {e}")
             # Proceed with only vector results if graph traversal fails

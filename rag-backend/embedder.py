@@ -90,27 +90,3 @@ class AzureEmbeddings(Embeddings):
             raise ValueError("Failed to embed query text.")
         return result[0]
 
-
-# Example usage
-# if __name__ == "__main__":
-#     embeddings = AzureEmbeddings()
-    
-#     # Example documents
-#     documents = ["first phrase", "second phrase", "third phrase"]
-    
-#     # Get embeddings for documents
-#     doc_embeddings = embeddings.embed_documents(documents)
-#     print(f"Generated {len(doc_embeddings)} document embeddings")
-    
-#     # Get embedding for a query
-#     query = "test query"
-#     query_embedding = embeddings.embed_query(query)
-#     print(f"Generated query embedding with {len(query_embedding)} dimensions")
-    
-#     # Display sample values
-#     for i, emb in enumerate(doc_embeddings):
-#         length = len(emb)
-#         print(
-#             f"Document {i}: length={length}, [{emb[0]:.6f}, {emb[1]:.6f}, "
-#             f"..., {emb[length-2]:.6f}, {emb[length-1]:.6f}]"
-#         )

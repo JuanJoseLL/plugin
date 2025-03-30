@@ -41,7 +41,7 @@ EMBBEDING_TIMEOUT = 30
 EMBBEDING_RETRIES = 3
 
 EMBEDDING_DIMENSION = 3072 # text-embedding-3-large
-# dimensions = 1536  # text-embedding-ada-002
+#EMBEDDING_DIMENSION = 1536  # text-embedding-3-small
 
 QWEN_API_URL = os.getenv("QWEN_API_URL", "https://api.totalgpt.ai/v1/chat/completions")
 API_KEY = os.getenv("INFERMATIC_API_KEY") # Ensure this is set in your .env
@@ -60,11 +60,18 @@ NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD") # Ensure this is set
 
 
 # --- RAG Config ---
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 50
-TOP_K_INITIAL_SEARCH = 3 # Vector search results
-GRAPH_CONTEXT_NEIGHBORS = 1 # How many NEXT neighbors to fetch (0 = none)
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 200
+TOP_K_INITIAL_SEARCH = 5 # Vector search results
+GRAPH_CONTEXT_NEIGHBORS = 5 # How many NEXT neighbors to fetch (0 = none)
 
+INGEST_SIMILARITY_THRESHOLD = 0.80
+INGEST_SIMILAR_NEIGHBORS_TO_LINK = 5
+INGEST_ENABLE_INTRA_DOC_SIMILARITY = "true"
+
+
+HF_MODEL_NAME =  "dslim/bert-base-NER"
+ENTITY_LABELS_TO_EXTRACT = ["PER", "ORG", "LOC"]
 
 # Create upload directory if it doesn't exist
 os.makedirs(UPLOAD_DIR, exist_ok=True)

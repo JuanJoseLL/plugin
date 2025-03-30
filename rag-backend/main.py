@@ -1,20 +1,41 @@
+import time
+from typing import Any, Dict
 from fastapi import FastAPI, UploadFile, Form, HTTPException, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import shutil
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain.schema.runnable import RunnableLambda, RunnablePassthrough
-# Import components and config (adjust paths if needed)
-from config import (logger, UPLOAD_DIR, TOP_K_INITIAL_SEARCH)
+
+from config import (
+    logger, 
+    UPLOAD_DIR, 
+    TOP_K_INITIAL_SEARCH,
+    HF_MODEL_NAME,
+    INGEST_ENABLE_INTRA_DOC_SIMILARITY,
+    INGEST_SIMILARITY_THRESHOLD,
+    INGEST_SIMILAR_NEIGHBORS_TO_LINK,
+    ENTITY_LABELS_TO_EXTRACT
+    )
 from embedder import AzureEmbeddings
 from model_client import CustomChatQwen
 from graph_db import get_neo4j_graph_instance, get_neo4j_vector_store
 from document_processing import load_and_split_document
 from retriever import get_graph_enhanced_retriever, format_docs
 import os
+from transformers import pipeline, AutoTokenizer, AutoModelForTokenClassification # Added imports
+
 # --- Initialize global components (or use FastAPI dependencies) ---
 # These could be initialized once and passed via Depends for better management
 try:
+    tokenizer = AutoTokenizer.from_pretrained(HF_MODEL_NAME)
+    model = AutoModelForTokenClassification.from_pretrained(HF_MODEL_NAME)
+    ner_pipeline = pipeline(
+        "ner",
+        model=model,
+        tokenizer=tokenizer,
+        aggregation_strategy="simple" 
+    )
     embedding_model = AzureEmbeddings()
     chat_model = CustomChatQwen()
     neo4j_graph = get_neo4j_graph_instance() # Ensures constraints/indices
@@ -37,62 +58,199 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+def extract_entities(text: str) -> Dict[str, Dict[str, Any]]:
+    """Extracts named entities using Hugging Face transformers pipeline."""
+    entities = {}
+    # Use labels defined in config, converting to set for efficient lookup
+    allowed_labels = set(ENTITY_LABELS_TO_EXTRACT) if ENTITY_LABELS_TO_EXTRACT else None
+
+    try:
+        
+        ner_results = ner_pipeline(text)
+        # Example result item:
+        # {'entity_group': 'ORG', 'score': 0.999, 'word': 'Example Corp', 'start': 10, 'end': 22}
+
+        for ent in ner_results:
+            entity_label = ent['entity_group']
+            # The 'word' field contains the extracted entity text after aggregation
+            entity_text = ent['word'].strip()
+
+            # Skip if label is not in our allowed list (if list exists)
+            if allowed_labels and entity_label not in allowed_labels:
+                continue
+
+            # Basic filtering for potentially empty strings or overly short entities if needed
+            if not entity_text or len(entity_text) < 2: 
+                 continue
+
+            
+            entity_key = entity_text.lower()
+
+            # Store the entity if it's new, or potentially update if score is higher
+            if entity_key not in entities or float(ent['score']) > entities[entity_key].get('score', 0.0):
+                 entities[entity_key] = {
+                     "label": entity_label,
+                     "text": entity_text, 
+                     "score": float(ent['score']) 
+                 }
+
+    except Exception as e:
+        
+        logger.error(f"Error during Hugging Face NER processing for text segment: {e}")
+        
+        return {} 
+
+    return entities
+
+
+
 # --- Background Task for Ingestion ---
 def ingest_pipeline(file_path: str, document_id: str):
-    """The actual ingestion logic running in the background."""
+    """Enhanced ingestion pipeline with entity extraction (HF) and optimized similarity linking."""
+    start_time = time.time()
     try:
-        logger.info(f"[Background] Starting ingestion for: {file_path}")
+        logger.info(f"[Ingest:{document_id}] Starting for: {file_path}")
         split_docs = load_and_split_document(file_path)
         if not split_docs:
-            logger.error(f"[Background] No documents generated for {file_path}. Aborting ingestion.")
+            logger.error(f"[Ingest:{document_id}] No documents generated. Aborting.")
             return
 
-        # Add documents and embeddings to Neo4jVector
-        # This creates (:Chunk) nodes with text, embedding, and metadata
-        # It also ensures the vector index exists based on the store's config
-        logger.info(f"[Background] Adding {len(split_docs)} chunks to vector store...")
-        added_ids = neo4j_vector_store.add_documents(split_docs, ids=[d.metadata["id"] for d in split_docs])
-        logger.info(f"[Background] Added {len(added_ids)} chunks to vector store.")
+        chunk_count = len(split_docs)
+        logger.info(f"[Ingest:{document_id}] Split into {chunk_count} chunks.")
 
+        # --- Step 1: Add Chunks to Vector Store ---
+        chunk_ids = [d.metadata["id"] for d in split_docs]
+        added_ids = neo4j_vector_store.add_documents(split_docs, ids=chunk_ids)
+        logger.info(f"[Ingest:{document_id}] Added {len(added_ids)} chunks to vector store.")
         if not added_ids:
-             logger.warning("[Background] No chunks were successfully added to the vector store.")
-             # Potentially remove the source document node if created?
+             logger.warning(f"[Ingest:{document_id}] No chunks added. Aborting.")
              return
 
-        # Add Document node and CONTAINS relationships
-        logger.info(f"[Background] Linking chunks to document node: {document_id}")
+        # --- Step 2: Create Document Node and CONTAINS Relationships ---
+        logger.info(f"[Ingest:{document_id}] Linking chunks to Document node...")
         neo4j_graph.query("""
             MERGE (d:Document {id: $doc_id})
             SET d.filename = $filename, d.last_updated = timestamp()
             WITH d
-            MATCH (c:Chunk) WHERE c.id IN $chunk_ids
+            UNWIND $chunk_ids AS chunk_id
+            MATCH (c:Chunk {id: chunk_id})
             MERGE (d)-[:CONTAINS]->(c)
         """, params={"doc_id": document_id, "filename": os.path.basename(file_path), "chunk_ids": added_ids})
 
-
-        # Add NEXT_CHUNK relationships (requires chunk_index metadata)
-        # Sort docs by index before creating relationships
-        sorted_docs = sorted([doc for doc in split_docs if doc.metadata["id"] in added_ids], key=lambda d: d.metadata["chunk_index"])
-        logger.info("[Background] Adding NEXT_CHUNK relationships...")
-        for i in range(len(sorted_docs) - 1):
-            prev_id = sorted_docs[i].metadata["id"]
-            curr_id = sorted_docs[i+1].metadata["id"]
+        # --- Step 3: Create NEXT_CHUNK Relationships ---
+        logger.info(f"[Ingest:{document_id}] Adding NEXT_CHUNK relationships...")
+        sorted_chunk_ids = [d.metadata["id"] for d in sorted(split_docs, key=lambda d: d.metadata["chunk_index"]) if d.metadata["id"] in added_ids]
+        batch_params = [{"prev_id": sorted_chunk_ids[i], "curr_id": sorted_chunk_ids[i+1]}
+                        for i in range(len(sorted_chunk_ids) - 1)]
+        if batch_params:
             neo4j_graph.query("""
-                MATCH (prev:Chunk {id: $prev_id})
-                MATCH (curr:Chunk {id: $curr_id})
+                UNWIND $batch AS pair
+                MATCH (prev:Chunk {id: pair.prev_id})
+                MATCH (curr:Chunk {id: pair.curr_id})
                 MERGE (prev)-[:NEXT_CHUNK]->(curr)
-            """, params={"prev_id": prev_id, "curr_id": curr_id})
+            """, params={"batch": batch_params})
+            logger.info(f"[Ingest:{document_id}] Added {len(batch_params)} NEXT_CHUNK relationships.")
 
-        logger.info(f"[Background] Successfully completed ingestion for: {file_path}")
+        # --- Step 4: Extract Entities (HF) and Create MENTIONS Relationships ---
+        logger.info(f"[Ingest:{document_id}] Extracting entities (HF) and linking MENTIONS...")
+        entity_links_batch = []
+        processed_entities = set() # Track unique entity keys (lowercase names)
 
-        # Optional: Implement Entity Extraction here
-        # 1. Iterate through chunks (sorted_docs)
-        # 2. Call an LLM or NLP model to extract entities/relationships
-        # 3. Use neo4j_graph.query() to MERGE entities and relationships
+        docs_to_process = [doc for doc in split_docs if doc.metadata["id"] in added_ids]
+
+        # Consider batching calls to ner_pipeline if performance is an issue
+        # For simplicity, process chunk by chunk here
+        for doc in docs_to_process:
+            chunk_id = doc.metadata["id"]
+            # *** Calls the new Hugging Face based function ***
+            entities = extract_entities(doc.page_content)
+
+            for entity_key, entity_data in entities.items(): # entity_key is lowercase name
+                 # Ensure entity node is created/merged only once per ingestion run
+                 if entity_key not in processed_entities:
+                      entity_links_batch.append({
+                          "chunk_id": None, # Flag for entity merge
+                          "entity_name": entity_key, # Use lowercase name for MERGE key
+                          "entity_label": entity_data["label"],
+                          "entity_text": entity_data["text"] # Store original case text
+                      })
+                      processed_entities.add(entity_key)
+                 # Add relationship merge parameters for this specific mention
+                 entity_links_batch.append({
+                     "chunk_id": chunk_id,
+                     "entity_name": entity_key, # Link using lowercase name
+                     "entity_label": None,
+                     "entity_text": None
+                 })
+
+        if entity_links_batch:
+             # Cypher query remains the same, using 'entity_name' for MERGE
+             neo4j_graph.query("""
+                UNWIND [item IN $batch WHERE item.chunk_id IS NULL] AS entity_data
+                MERGE (e:Entity {name: entity_data.entity_name}) // Use lowercase 'name' as unique key
+                ON CREATE SET e.label = entity_data.entity_label, e.text = entity_data.entity_text, e.created = timestamp()
+                ON MATCH SET e.last_seen = timestamp(), e.label = coalesce(e.label, entity_data.entity_label), e.text = coalesce(e.text, entity_data.entity_text) // Update label/text if missing
+
+                WITH $batch AS batch_data
+                UNWIND [item IN batch_data WHERE item.chunk_id IS NOT NULL] AS link_data
+                MATCH (c:Chunk {id: link_data.chunk_id})
+                MATCH (e:Entity {name: link_data.entity_name}) // Match entity using lowercase name
+                MERGE (c)-[:MENTIONS]->(e)
+             """, params={"batch": entity_links_batch})
+             logger.info(f"[Ingest:{document_id}] Processed {len(processed_entities)} unique entities (HF) and created MENTIONS links.")
+
+        # --- Step 5: Create SIMILAR_TO Relationships using Vector Index ---
+        # This step remains unchanged as it depends on embeddings, not NER
+        logger.info(f"[Ingest:{document_id}] Creating SIMILAR_TO relationships (threshold > {INGEST_SIMILARITY_THRESHOLD})...")
+        # (Keep the existing Cypher query using db.index.vector.queryNodes)
+        cypher_query_similar = f"""
+            MATCH (new:Chunk) WHERE new.id IN $chunk_ids
+            CALL db.index.vector.queryNodes('chunk_embeddings', $k_similar, new.embedding) YIELD node AS similar_candidate, score
+            WITH new, similar_candidate, score
+            WHERE score > $threshold AND new <> similar_candidate
+            {'''
+            WITH new, similar_candidate, score
+            MATCH (new)<-[:CONTAINS]-(d1:Document)
+            MATCH (similar_candidate)<-[:CONTAINS]-(d2:Document)
+            WHERE d1 <> d2
+            ''' if not INGEST_ENABLE_INTRA_DOC_SIMILARITY else ''}
+            RETURN new.id as id1, similar_candidate.id as id2, score
+        """
+        try:
+            results = neo4j_graph.query(cypher_query_similar, params={
+                "chunk_ids": added_ids,
+                "k_similar": INGEST_SIMILAR_NEIGHBORS_TO_LINK * 2, # Fetch more candidates
+                "threshold": INGEST_SIMILARITY_THRESHOLD
+            })
+            similar_links_batch = []
+            processed_pairs = set()
+            for record in results:
+                id1, id2, score = record["id1"], record["id2"], record["score"]
+                pair = tuple(sorted((id1, id2)))
+                if pair not in processed_pairs:
+                    similar_links_batch.append({"id1": id1, "id2": id2, "score": score})
+                    processed_pairs.add(pair)
+
+            if similar_links_batch:
+                neo4j_graph.query("""
+                    UNWIND $batch AS link
+                    MATCH (c1:Chunk {id: link.id1})
+                    MATCH (c2:Chunk {id: link.id2})
+                    MERGE (c1)-[r:SIMILAR_TO]->(c2)
+                    SET r.score = link.score
+                """, params={"batch": similar_links_batch})
+                logger.info(f"[Ingest:{document_id}] Added {len(similar_links_batch)} SIMILAR_TO relationships.")
+            else:
+                 logger.info(f"[Ingest:{document_id}] No new SIMILAR_TO relationships met the threshold.")
+        except Exception as e:
+             logger.error(f"[Ingest:{document_id}] Failed during SIMILAR_TO linking using vector index: {e}")
+
+        # --- Completion ---
+        end_time = time.time()
+        logger.info(f"[Ingest:{document_id}] Successfully completed ingestion for: {file_path} in {end_time - start_time:.2f} seconds")
 
     except Exception as e:
-        logger.exception(f"[Background] Error during ingestion pipeline for {file_path}: {e}")
-        # Add monitoring/alerting here for production
+        logger.exception(f"[Ingest:{document_id}] Critical error during ingestion pipeline for {file_path}: {e}")
 
 
 # --- API Endpoints ---
