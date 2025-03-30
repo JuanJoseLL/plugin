@@ -14,8 +14,8 @@ from config import (
     LLM_MAX_TOKENS,
     LLM_TEMPERATURE,
     LLM_TOP_K,
-    LLM_REPETITION_PENALTY,logger)
-
+    LLM_REPETITION_PENALTY,get_logger)
+logger = get_logger(__name__)
 # Import CallbackManagerForLLMRun for type hinting (optional but good practice)
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun
 

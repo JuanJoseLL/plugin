@@ -15,26 +15,50 @@ os.makedirs(LOG_DIR, exist_ok=True)
 
 
 # Configure logging to both file and console
-logger = logging.getLogger(__name__)
-logger.setLevel(getattr(logging, LOG_LEVEL))
+def setup_logging():
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(getattr(logging, LOG_LEVEL))
+    
+    # Remove any existing handlers to avoid duplicates when reloading
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+    
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    console_handler.setFormatter(console_format)
+    root_logger.addHandler(console_handler)
+    
+    # File handler with rotation
+    file_handler = RotatingFileHandler(
+        LOG_FILE, 
+        maxBytes=10*1024*1024,  # 10MB
+        backupCount=5,
+        encoding='utf-8'
+    )
+    file_handler.setFormatter(console_format)
+    root_logger.addHandler(file_handler)
+    
+    return root_logger
 
-# Console handler
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-logger.addHandler(console_handler)
+# Setup the root logger
+logger = setup_logging()
 
-# File handler with rotation (10MB max size, keep 5 backup files)
-file_handler = RotatingFileHandler(
-    LOG_FILE, 
-    maxBytes=10*1024*1024,  # 10MB
-    backupCount=5,
-    encoding='utf-8'
-)
-file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-logger.addHandler(file_handler)
+# This function should be used in other modules to get a logger
+def get_logger(name=None):
+    """
+    Get a logger with the given name.
+    If no name is provided, returns the root logger.
+    
+    Usage in other files:
+    from config import get_logger
+    logger = get_logger(__name__)  # Will use the module name
+    """
+    if name:
+        return logging.getLogger(name)
+    return logger
 
-# Prevent propagation to root logger to avoid duplicate logs
-logger.propagate = False
 
 UPLOAD_DIR = 'data/context_files'
 EMBBEDING_TIMEOUT = 30

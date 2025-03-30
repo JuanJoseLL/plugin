@@ -3,9 +3,10 @@ from langchain_community.document_loaders import PyPDFLoader, TextLoader # Add T
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 import hashlib
-from config import (logger, CHUNK_SIZE, CHUNK_OVERLAP)
+from config import (get_logger, CHUNK_SIZE, CHUNK_OVERLAP)
 import os
 
+logger = get_logger(__name__)
 
 def load_and_split_document(file_path: str) -> List[Document]:
     """Loads and splits a document using LangChain components."""

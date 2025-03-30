@@ -8,7 +8,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain.schema.runnable import RunnableLambda, RunnablePassthrough
 
 from config import (
-    logger, 
+    get_logger, 
     UPLOAD_DIR, 
     TOP_K_INITIAL_SEARCH,
     HF_MODEL_NAME,
@@ -24,7 +24,7 @@ from document_processing import load_and_split_document
 from retriever import get_graph_enhanced_retriever, format_docs
 import os
 from transformers import pipeline, AutoTokenizer, AutoModelForTokenClassification # Added imports
-
+logger = get_logger(__name__)
 # --- Initialize global components (or use FastAPI dependencies) ---
 # These could be initialized once and passed via Depends for better management
 try:

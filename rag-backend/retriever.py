@@ -7,7 +7,9 @@ from langchain_core.runnables import RunnableParallel, RunnablePassthrough, Runn
 from operator import itemgetter
 from config import (
     GRAPH_CONTEXT_NEIGHBORS,
-    logger)
+    get_logger)
+
+logger = get_logger(__name__)
 def format_docs(docs: List[Document]) -> str:
     """Formats retrieved documents into a single string for the LLM context."""
     # Simple join, consider adding metadata like source/page if useful

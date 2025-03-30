@@ -6,7 +6,9 @@ from config import (
     NEO4J_URI,
     NEO4J_USER,
     NEO4J_PASSWORD,
-    EMBEDDING_DIMENSION, logger)
+    EMBEDDING_DIMENSION, get_logger)
+
+logger = get_logger(__name__)
 
 def get_neo4j_graph_instance():
     

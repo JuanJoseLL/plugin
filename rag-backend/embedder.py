@@ -7,7 +7,9 @@ from langchain_core.embeddings import Embeddings
 from azure.ai.inference import EmbeddingsClient
 from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import HttpResponseError
-from config import logger
+from config import get_logger
+
+logger = get_logger(__name__)
 load_dotenv()
 
 # Configuration constants
