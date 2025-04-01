@@ -14,7 +14,7 @@ def load_and_split_document(file_path: str) -> List[Document]:
         if file_path.lower().endswith(".pdf"):
             loader = PyPDFLoader(file_path)
         elif file_path.lower().endswith(".txt"):
-             loader = TextLoader(file_path, encoding="utf-8") # Specify encoding
+             loader = TextLoader(file_path, encoding="utf-8") 
         else:
             logger.warning(f"Unsupported file type: {file_path}. Skipping.")
             return []
@@ -29,23 +29,22 @@ def load_and_split_document(file_path: str) -> List[Document]:
             chunk_size=CHUNK_SIZE,
             chunk_overlap=CHUNK_OVERLAP,
             length_function=len,
-            add_start_index=True, # Useful for referencing original position
+            add_start_index=True, 
         )
         split_docs = text_splitter.split_documents(documents)
 
-        # Add unique IDs and metadata
+      
         doc_base_name = os.path.basename(file_path)
         for i, doc in enumerate(split_docs):
-            # Create a unique, deterministic ID for the chunk
-            # Combine document name and chunk content/index for uniqueness
+            
 
-            doc_content = doc.page_content[:100]  # Use first 100 chars to avoid excessively long strings
+            doc_content = doc.page_content[:100]  
             content_hash = hashlib.md5(f"{doc_base_name}_{i}_{doc_content}".encode('utf-8')).hexdigest()[:12]
             chunk_id = f"chunk_{content_hash}"
             doc.metadata["id"] = chunk_id
             doc.metadata["chunk_index"] = i
             doc.metadata["source_document"] = doc_base_name
-            # Keep original source/page metadata if present from loader
+            
             doc.metadata["source"] = doc.metadata.get("source", doc_base_name)
             doc.metadata["page"] = doc.metadata.get("page", None)
 

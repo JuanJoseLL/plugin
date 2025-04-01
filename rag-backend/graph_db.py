@@ -23,16 +23,6 @@ def get_neo4j_graph_instance():
 
         logger.info("Ensured Neo4j constraints exist.")
 
-        # Create vector index (handled by Neo4jVector, but good to know syntax)
-        # graph.query(f"""
-        # CREATE VECTOR INDEX `chunk_embeddings` IF NOT EXISTS
-        # FOR (c:Chunk) ON (c.embedding)
-        # OPTIONS {{indexConfig: {{
-        #     `vector.dimensions`: {EMBEDDING_DIMENSION},
-        #     `vector.similarity_function`: 'cosine'
-        # }}}}
-        # """)
-        # logger.info("Ensured Neo4j vector index exists/is configured.")
 
     except Exception as e:
         logger.warning(f"Could not ensure Neo4j constraints/indices (might require DB admin privileges or DB restart): {e}")
@@ -58,11 +48,11 @@ def get_neo4j_vector_store(embedding_function: Embeddings):
             username=NEO4J_USER,
             password=NEO4J_PASSWORD,
             index_name="chunk_embeddings", 
-            node_label="Chunk",            # Label for nodes with embeddings
-            text_node_properties=["text"], # Property storing the text
-            embedding_node_property="embedding", # Property storing the embedding
+            node_label="Chunk",            
+            text_node_properties=["text"], # storing the text
+            embedding_node_property="embedding", #  storing the embedding
             # Define how documents map to graph properties
-            # Often includes 'id' if you explicitly set it, or Neo4j's internal ID
+           
             retrieval_query="""
             RETURN node.text AS text, score, {
                 id: node.id,

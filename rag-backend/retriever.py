@@ -12,7 +12,6 @@ from config import (
 logger = get_logger(__name__)
 def format_docs(docs: List[Document]) -> str:
     """Formats retrieved documents into a single string for the LLM context."""
-    # Simple join, consider adding metadata like source/page if useful
     return "\n\n---\n\n".join(doc.page_content for doc in docs)
 
 def get_graph_enhanced_retriever(vector_retriever: BaseRetriever, graph: Neo4jGraph, k_neighbors: int = GRAPH_CONTEXT_NEIGHBORS) -> BaseRetriever:
@@ -22,7 +21,7 @@ def get_graph_enhanced_retriever(vector_retriever: BaseRetriever, graph: Neo4jGr
     def fetch_neighbors(docs: List[Document]) -> List[Document]:
         """Fetches neighboring chunks from the graph for the initially retrieved docs."""
         if not docs or k_neighbors <= 0:
-            return docs # Return original docs if no neighbors requested or no initial docs
+            return docs #
 
         all_docs_map = {doc.metadata["id"]: doc for doc in docs}
         neighbor_query = """
@@ -73,7 +72,7 @@ def get_graph_enhanced_retriever(vector_retriever: BaseRetriever, graph: Neo4jGr
                 "k_neighbors": k_neighbors
             })
             
-            # Track different neighbor types for logging
+           
             sequential_neighbors = 0
             semantic_neighbors = 0
             
@@ -92,7 +91,7 @@ def get_graph_enhanced_retriever(vector_retriever: BaseRetriever, graph: Neo4jGr
                     )
                     all_docs_map[neighbor_id] = neighbor_doc
                     
-                    # Count by relationship type
+                    
                     if record["relationship_type"].startswith("sequential"):
                         sequential_neighbors += 1
                     elif record["relationship_type"] == "semantic":
@@ -103,16 +102,12 @@ def get_graph_enhanced_retriever(vector_retriever: BaseRetriever, graph: Neo4jGr
                     f"{sequential_neighbors} sequential and {semantic_neighbors} semantic")
         except Exception as e:
             logger.error(f"Failed to fetch graph neighbors: {e}")
-            # Proceed with only vector results if graph traversal fails
+            
 
-        # Return combined list of documents (original + neighbors)
-        # Optional: Re-order based on chunk_index or relevance? For now, just combine.
+       
         return list(all_docs_map.values())
 
-    # Create a runnable sequence
-    # 1. Run vector retriever
-    # 2. Pass results to fetch_neighbors
-    # 3. Format the combined docs
+    
     graph_retriever_runnable = (
         vector_retriever # Input: query string -> Output: List[Document]
         | RunnableLambda(fetch_neighbors) # Input: List[Document] -> Output: List[Document] (original + neighbors)

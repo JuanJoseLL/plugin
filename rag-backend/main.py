@@ -25,8 +25,8 @@ from retriever import get_graph_enhanced_retriever, format_docs
 import os
 from transformers import pipeline, AutoTokenizer, AutoModelForTokenClassification # Added imports
 logger = get_logger(__name__)
-# --- Initialize global components (or use FastAPI dependencies) ---
-# These could be initialized once and passed via Depends for better management
+
+
 try:
     tokenizer = AutoTokenizer.from_pretrained(HF_MODEL_NAME)
     model = AutoModelForTokenClassification.from_pretrained(HF_MODEL_NAME)
@@ -38,16 +38,15 @@ try:
     )
     embedding_model = AzureEmbeddings()
     chat_model = CustomChatQwen()
-    neo4j_graph = get_neo4j_graph_instance() # Ensures constraints/indices
+    neo4j_graph = get_neo4j_graph_instance() 
     neo4j_vector_store = get_neo4j_vector_store(embedding_model)
     logger.info("Initialized LangChain components (Embeddings, ChatModel, Neo4jGraph, Neo4jVector)")
 except Exception as e:
     logger.exception(f"Fatal error during initialization: {e}")
-    # Application might not be usable, handle appropriately (e.g., exit or raise)
+    
     raise RuntimeError(f"Failed to initialize core components: {e}")
 
 
-# --- FastAPI App Setup ---
 app = FastAPI(title="LangChain GraphRAG Agent", version="1.1.0")
 
 app.add_middleware(
@@ -61,15 +60,12 @@ app.add_middleware(
 def extract_entities(text: str) -> Dict[str, Dict[str, Any]]:
     """Extracts named entities using Hugging Face transformers pipeline."""
     entities = {}
-    # Use labels defined in config, converting to set for efficient lookup
     allowed_labels = set(ENTITY_LABELS_TO_EXTRACT) if ENTITY_LABELS_TO_EXTRACT else None
 
     try:
         
         ner_results = ner_pipeline(text)
-        # Example result item:
-        # {'entity_group': 'ORG', 'score': 0.999, 'word': 'Example Corp', 'start': 10, 'end': 22}
-
+        
         for ent in ner_results:
             entity_label = ent['entity_group']
             # The 'word' field contains the extracted entity text after aggregation
@@ -79,7 +75,7 @@ def extract_entities(text: str) -> Dict[str, Dict[str, Any]]:
             if allowed_labels and entity_label not in allowed_labels:
                 continue
 
-            # Basic filtering for potentially empty strings or overly short entities if needed
+            
             if not entity_text or len(entity_text) < 2: 
                  continue
 
@@ -104,9 +100,8 @@ def extract_entities(text: str) -> Dict[str, Dict[str, Any]]:
 
 
 
-# --- Background Task for Ingestion ---
 def ingest_pipeline(file_path: str, document_id: str):
-    """Enhanced ingestion pipeline with entity extraction (HF) and optimized similarity linking."""
+    """ingestion pipeline with entity extraction (HF) and optimized similarity linking."""
     start_time = time.time()
     try:
         logger.info(f"[Ingest:{document_id}] Starting for: {file_path}")
@@ -158,33 +153,32 @@ def ingest_pipeline(file_path: str, document_id: str):
 
         docs_to_process = [doc for doc in split_docs if doc.metadata["id"] in added_ids]
 
-        # Consider batching calls to ner_pipeline if performance is an issue
-        # For simplicity, process chunk by chunk here
+        
         for doc in docs_to_process:
             chunk_id = doc.metadata["id"]
             # *** Calls the new Hugging Face based function ***
             entities = extract_entities(doc.page_content)
 
-            for entity_key, entity_data in entities.items(): # entity_key is lowercase name
-                 # Ensure entity node is created/merged only once per ingestion run
+            for entity_key, entity_data in entities.items(): 
+                 
                  if entity_key not in processed_entities:
                       entity_links_batch.append({
                           "chunk_id": None, # Flag for entity merge
-                          "entity_name": entity_key, # Use lowercase name for MERGE key
+                          "entity_name": entity_key, 
                           "entity_label": entity_data["label"],
-                          "entity_text": entity_data["text"] # Store original case text
+                          "entity_text": entity_data["text"] 
                       })
                       processed_entities.add(entity_key)
-                 # Add relationship merge parameters for this specific mention
+                 
                  entity_links_batch.append({
                      "chunk_id": chunk_id,
-                     "entity_name": entity_key, # Link using lowercase name
+                     "entity_name": entity_key, 
                      "entity_label": None,
                      "entity_text": None
                  })
 
         if entity_links_batch:
-             # Cypher query remains the same, using 'entity_name' for MERGE
+             # Cypher query 
              neo4j_graph.query("""
                 UNWIND [item IN $batch WHERE item.chunk_id IS NULL] AS entity_data
                 MERGE (e:Entity {name: entity_data.entity_name}) // Use lowercase 'name' as unique key
@@ -200,9 +194,9 @@ def ingest_pipeline(file_path: str, document_id: str):
              logger.info(f"[Ingest:{document_id}] Processed {len(processed_entities)} unique entities (HF) and created MENTIONS links.")
 
         # --- Step 5: Create SIMILAR_TO Relationships using Vector Index ---
-        # This step remains unchanged as it depends on embeddings, not NER
+        
         logger.info(f"[Ingest:{document_id}] Creating SIMILAR_TO relationships (threshold > {INGEST_SIMILARITY_THRESHOLD})...")
-        # (Keep the existing Cypher query using db.index.vector.queryNodes)
+        
         cypher_query_similar = f"""
             MATCH (new:Chunk) WHERE new.id IN $chunk_ids
             CALL db.index.vector.queryNodes('chunk_embeddings', $k_similar, new.embedding) YIELD node AS similar_candidate, score
@@ -219,7 +213,7 @@ def ingest_pipeline(file_path: str, document_id: str):
         try:
             results = neo4j_graph.query(cypher_query_similar, params={
                 "chunk_ids": added_ids,
-                "k_similar": INGEST_SIMILAR_NEIGHBORS_TO_LINK * 2, # Fetch more candidates
+                "k_similar": INGEST_SIMILAR_NEIGHBORS_TO_LINK * 2, 
                 "threshold": INGEST_SIMILARITY_THRESHOLD
             })
             similar_links_batch = []
@@ -294,8 +288,11 @@ async def chat(message: str = Form(...)):
         vector_retriever = neo4j_vector_store.as_retriever(search_kwargs={'k': TOP_K_INITIAL_SEARCH})
         graph_enhanced_retriever = get_graph_enhanced_retriever(vector_retriever, neo4j_graph)
 
-        # Define prompt template
-        template = """You are a helpful AI assistant. Answer the user's question based *only* on the provided context. If the context does not contain the answer, state that you cannot answer based on the information available. Do not make information up. Be concise and accurate.
+        # System Prompt
+        template = """You are a helpful AI assistant. Answer the user's question based *only* 
+        on the provided context. If the context does not contain the answer, s
+        tate that you cannot answer based on the information available. 
+        Do not make information up. Be concise and accurate.
 
         Context:
         {context}
@@ -306,7 +303,7 @@ async def chat(message: str = Form(...)):
         Answer:"""
         prompt = ChatPromptTemplate.from_template(template)
 
-        # Define the full RAG chain
+        
         rag_chain = (
             # RunnableParallel allows fetching context and passing question through simultaneously
             {"context": graph_enhanced_retriever | RunnableLambda(format_docs), "question": RunnablePassthrough()}
@@ -317,15 +314,14 @@ async def chat(message: str = Form(...)):
 
         # --- Invoke the RAG chain ---
         logger.info("Invoking RAG chain...")
-        reply = await rag_chain.ainvoke(message) # Use async invoke for FastAPI
-        # If using synchronous components wrapped:
-        # reply = await asyncio.to_thread(rag_chain.invoke, message)
+        reply = await rag_chain.ainvoke(message) #  async invoke for FastAPI
+       
 
         logger.info("RAG chain finished, returning reply.")
         return {"reply": reply}
 
     except ValueError as e:
-        # Specific error like query embedding failure
+        
         logger.error(f"ValueError during chat processing: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except ConnectionError as e:
@@ -341,4 +337,4 @@ async def chat(message: str = Form(...)):
 if __name__ == "__main__":
     import uvicorn
     
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True) # Use reload for development
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True) 

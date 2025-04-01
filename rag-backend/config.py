@@ -10,27 +10,21 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 LOG_DIR = "logs"
 LOG_FILE = os.path.join(LOG_DIR, "rag_backend.log")
 
-# Create logs directory if it doesn't exist
 os.makedirs(LOG_DIR, exist_ok=True)
 
 
-# Configure logging to both file and console
 def setup_logging():
-    # Configure root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(getattr(logging, LOG_LEVEL))
     
-    # Remove any existing handlers to avoid duplicates when reloading
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
     
-    # Console handler
     console_handler = logging.StreamHandler()
     console_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     console_handler.setFormatter(console_format)
     root_logger.addHandler(console_handler)
     
-    # File handler with rotation
     file_handler = RotatingFileHandler(
         LOG_FILE, 
         maxBytes=10*1024*1024,  # 10MB
@@ -42,10 +36,8 @@ def setup_logging():
     
     return root_logger
 
-# Setup the root logger
 logger = setup_logging()
 
-# This function should be used in other modules to get a logger
 def get_logger(name=None):
     """
     Get a logger with the given name.
@@ -80,7 +72,7 @@ LLM_REPETITION_PENALTY = 1.2
 
 NEO4J_URI = os.getenv("NEO4J_URL")
 NEO4J_USER = os.getenv("NEO4J_USERNAME")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD") # Ensure this is set
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD") 
 
 
 # --- RAG Config ---
@@ -97,5 +89,4 @@ INGEST_ENABLE_INTRA_DOC_SIMILARITY = "true"
 HF_MODEL_NAME =  "dslim/bert-base-NER"
 ENTITY_LABELS_TO_EXTRACT = ["PER", "ORG", "LOC"]
 
-# Create upload directory if it doesn't exist
 os.makedirs(UPLOAD_DIR, exist_ok=True)

@@ -12,7 +12,6 @@ from config import get_logger
 logger = get_logger(__name__)
 load_dotenv()
 
-# Configuration constants
 AZURE_AI_EMBEDDINGS_ENDPOINT = os.getenv("AZURE_AI_EMBEDDINGS_ENDPOINT")
 AZURE_AI_EMBEDDINGS_KEY = os.getenv("AZURE_AI_EMBEDDINGS_KEY")
 EMBEDDING_MODEL = os.getenv("AZURE_EMBEDDING_MODEL", "text-embedding-3-large")
@@ -63,7 +62,7 @@ class AzureEmbeddings(Embeddings):
                     model=self.model
                 )
                 
-                # Sort by index to maintain original order
+                # Sort by index 
                 sorted_data = sorted(response.data, key=lambda x: x.index)
                 return [item.embedding for item in sorted_data]
                 
@@ -79,7 +78,7 @@ class AzureEmbeddings(Embeddings):
                     raise ValueError(f"Unexpected error while getting embeddings: {e}")
                 time.sleep(1 * (attempt + 1))
         
-        return []  # Should not be reached
+        return []  
     
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """Get embeddings for a list of documents."""
